@@ -1,0 +1,43 @@
+name: iQOO refurbished search monitor
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Playwright
+        run: |
+          python -m pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Check iQOO
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          IQOO_HOME: https://shop.iqoo.com/in/
+          IQOO_SEARCH: refurbished
+        run: python monitor.py
+
+      - name: Save state
+        run: |
+          git config user.name "iQOO monitor"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.json
+          git diff --cached --quiet || git commit -m "Update monitor state"
+          git push || true
