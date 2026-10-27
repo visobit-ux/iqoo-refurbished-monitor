@@ -1,216 +1,118 @@
-import asyncio, json, os, re
+import os, json, re, asyncio
 from pathlib import Path
-from urllib.parse import urljoin, urlparse, parse_qsl, urlencode, urlunparse
+from datetime import datetime, timezone
 from playwright.async_api import async_playwright
+import requests
 
-# Search the same iQOO store shown in the user's screenshot.
-HOME = os.getenv('IQOO_HOME', 'https://mshop.iqoo.com/in/')
-QUERY = os.getenv('IQOO_SEARCH', 'refurbished')
-STATE_FILE = Path('state.json')
+PRODUCTS = [
+    {"url":"https://mshop.iqoo.com/in/product/2057?skuId=8341", "fallback":"iQOO Neo 10R Refurbished"},
+    {"url":"https://mshop.iqoo.com/in/product/2074?skuId=8469", "fallback":"iQOO Z10 5G Refurbished"},
+    {"url":"https://mshop.iqoo.com/in/product/2070?skuId=8445", "fallback":"iQOO Neo 10 Refurbished"},
+    {"url":"https://mshop.iqoo.com/in/product/2054?skuId=8325", "fallback":"iQOO Neo9 Pro Refurbished"},
+    {"url":"https://mshop.iqoo.com/in/product/2066?skuId=8405", "fallback":"iQOO 13 Refurbished"},
+]
+STATE_FILE = Path("state.json")
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-async def telegram(message):
-    import urllib.request, urllib.parse
-    data = urllib.parse.urlencode({'chat_id': os.environ['TELEGRAM_CHAT_ID'], 'text': message, 'disable_web_page_preview': 'true'}).encode()
-    req = urllib.request.Request(f"https://api.telegram.org/bot{os.environ['TELEGRAM_BOT_TOKEN']}/sendMessage", data=data, method='POST')
-    with urllib.request.urlopen(req, timeout=20) as response:
-        response.read()
 
-def clean(s):
-    return re.sub(r'\s+', ' ', s or '').strip()
+def telegram(text):
+    if not TOKEN or not CHAT_ID:
+        raise RuntimeError("Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID GitHub Secrets")
+    r = requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data={"chat_id": CHAT_ID, "text": text, "disable_web_page_preview": True}, timeout=25)
+    r.raise_for_status()
+    data = r.json()
+    if not data.get("ok"):
+        raise RuntimeError(f"Telegram API error: {data}")
 
-def is_compare_url(url):
-    u = (url or '').lower()
-    return 'productcompare' in u or 'compare' in urlparse(u).path
 
-async def find_search(page):
-    # Prefer actual visible search inputs; avoid broad class selectors that can open Compare Models.
-    selectors = [
-        'input[type="search"]',
-        'input[placeholder*="search" i]',
-        'input[aria-label*="search" i]',
-        'input[name*="search" i]',
-        'input[placeholder*="搜索"]',
-    ]
-    for selector in selectors:
+def price_from(text):
+    patterns = [r"₹\s*[\d,]+", r"Rs\.?\s*[\d,]+", r"INR\s*[\d,]+"]
+    found = []
+    for pat in patterns:
+        found.extend(re.findall(pat, text, flags=re.I))
+    if not found:
+        return "Price not detected"
+    # Prefer the first displayed price, usually current selling price near product header.
+    return re.sub(r"\s+", " ", found[0]).strip()
+
+
+def status_from(text):
+    t = text.lower()
+    negative = ["out of stock", "sold out", "currently unavailable", "unavailable", "notify me", "coming soon"]
+    positive = ["add to cart", "buy now", "add to bag", "in stock", "available now", "buy now"]
+    if any(x in t for x in negative):
+        # Some pages show a generic word 'unavailable' for an unselected variant; this URL pins skuId.
+        return "OUT_OF_STOCK"
+    if any(x in t for x in positive):
+        return "IN_STOCK"
+    return "UNKNOWN"
+
+
+async def inspect(page, item):
+    await page.goto(item["url"], wait_until="domcontentloaded", timeout=60000)
+    try:
+        await page.wait_for_load_state("networkidle", timeout=12000)
+    except Exception:
+        pass
+    await page.wait_for_timeout(2500)
+    title = await page.title()
+    body = await page.locator("body").inner_text(timeout=15000)
+    # Use visible product heading where available, while retaining known fallback model names.
+    heading = ""
+    for selector in ["h1", "[class*='product-name']", "[class*='productName']", "[class*='title']"]:
         try:
-            loc = page.locator(selector).first
-            if await loc.count() and await loc.is_visible():
-                return loc
-        except Exception:
-            pass
-
-    # Open search only through controls explicitly labelled as search.
-    for selector in [
-        'button[aria-label*="search" i]', 'button[title*="search" i]',
-        'a[aria-label*="search" i]', 'a[title*="search" i]',
-        '[role="button"][aria-label*="search" i]'
-    ]:
-        try:
-            loc = page.locator(selector).first
-            if await loc.count() and await loc.is_visible():
-                await loc.click(timeout=2500)
-                await page.wait_for_timeout(500)
+            candidate = (await page.locator(selector).first.inner_text(timeout=1500)).strip()
+            if candidate and len(candidate) < 140 and "compare models" not in candidate.lower():
+                heading = candidate
                 break
         except Exception:
-            pass
-
-    for selector in selectors:
-        try:
-            loc = page.locator(selector).first
-            if await loc.count() and await loc.is_visible():
-                return loc
-        except Exception:
-            pass
-
-    # Last fallback: visible text input in the header/search overlay, excluding unrelated fields.
-    try:
-        candidates = page.locator('input:visible')
-        for i in range(await candidates.count()):
-            loc = candidates.nth(i)
-            typ = (await loc.get_attribute('type') or 'text').lower()
-            name = ' '.join([(await loc.get_attribute('placeholder') or ''), (await loc.get_attribute('aria-label') or ''), (await loc.get_attribute('name') or '')]).lower()
-            if typ in ('text', 'search', '') and not any(x in name for x in ['phone', 'mobile', 'email', 'pincode', 'postal', 'coupon']):
-                return loc
-    except Exception:
-        pass
-    return None
-
-async def extract_search_cards(page):
-    """Extract only cards visible in the refurbished search results. Never use details from unrelated pages."""
-    products = {}
-    anchors = page.locator('a[href*="/product/"]')
-    for i in range(await anchors.count()):
-        a = anchors.nth(i)
-        try:
-            href = await a.get_attribute('href')
-            if not href:
-                continue
-            full = urljoin(page.url, href)
-            if is_compare_url(full):
-                continue
-            path = urlparse(full).path.lower()
-            if not re.search(r'/product/\d+', path):
-                continue
-
-            # Choose the nearest ancestor whose text resembles a real search card.
-            card_text = await a.evaluate('''a => {
-              let e=a, best='';
-              for(let i=0; e && i<8; i++, e=e.parentElement){
-                const t=(e.innerText || '').trim();
-                if(t.length >= 5 && t.length < 1800 && /refurbished/i.test(t) && /₹\s*[\d,]+/.test(t)) {
-                  best=t; break;
-                }
-              }
-              return best;
-            }''')
-            card_text = clean(card_text)
-            if not card_text or not re.search(r'\brefurbished\b', card_text, re.I):
-                continue
-            if re.search(r'compare\s*models|product\s*compare', card_text, re.I):
-                continue
-
-            # Parse only text from the search-result card itself.
-            raw_lines = await a.evaluate('''a => {
-              let e=a, best='';
-              for(let i=0; e && i<8; i++, e=e.parentElement){
-                const t=(e.innerText || '').trim();
-                if(t.length >= 5 && t.length < 1800 && /refurbished/i.test(t) && /₹\s*[\d,]+/.test(t)) { best=t; break; }
-              }
-              return best;
-            }''')
-            lines = [clean(x) for x in (raw_lines or '').splitlines() if clean(x)]
-            title = next((x for x in lines if 'refurbished' in x.lower() and len(x) <= 150 and not re.search(r'₹|sold\s*out', x, re.I)), '')
-            if not title:
-                title = next((x for x in clean(await a.inner_text()).splitlines() if 'refurbished' in x.lower()), '')
-            if not title:
-                continue
-            m = re.search(r'₹\s*[\d,]+(?:\.\d{1,2})?', raw_lines or '')
-            price = clean(m.group(0)) if m else ''
-
-            if re.search(r'\bsold\s*out\b|out\s*of\s*stock|currently unavailable', card_text, re.I):
-                status = 'OUT_OF_STOCK'
-            elif price:
-                # On the search results, price without a Sold Out badge is treated as available.
-                status = 'IN_STOCK'
-            else:
-                status = 'UNCLEAR'
-
-            # Preserve variant query parameters (e.g. skuId) so separate variants aren't merged.
-            item = {'name': title, 'price': price, 'url': full, 'status': status, 'card_text': card_text[:500]}
-            if full not in products or len(card_text) > len(products[full].get('card_text', '')):
-                products[full] = item
-        except Exception:
             continue
-    return sorted(products.values(), key=lambda x: (x['name'].lower(), x['url']))
+    name = heading or item["fallback"]
+    if title and len(title.strip()) > 2 and "iqoo" in title.lower() and not heading:
+        # Avoid using generic site titles as model names.
+        cleaned = re.sub(r"\s*[|–-]\s*(iQOO|vivo).*$", "", title.strip(), flags=re.I)
+        if cleaned and "official" not in cleaned.lower() and "compare" not in cleaned.lower():
+            name = cleaned
+    return {"name": name, "price": price_from(body), "status": status_from(body), "url": item["url"]}
 
-async def search_products(page):
-    await page.goto(HOME, wait_until='domcontentloaded', timeout=60000)
-    await page.wait_for_timeout(2500)
-    search = await find_search(page)
-    if search is None:
-        raise RuntimeError('Visible iQOO search box not found; refusing to report unrelated page content')
-    await search.fill(QUERY)
-    try:
-        await search.press('Enter', timeout=4000)
-    except Exception:
-        pass
-    await page.wait_for_timeout(1800)
-    # Some versions submit search with a button rather than Enter.
-    if not await extract_search_cards(page):
-        try:
-            # Only click a submit button associated with the search input; never generic site buttons.
-            await search.evaluate('el => { const f=el.closest("form"); if (f) f.requestSubmit(); }')
-        except Exception:
-            pass
-        await page.wait_for_timeout(3000)
-    for _ in range(8):
-        await page.mouse.wheel(0, 850)
-        await page.wait_for_timeout(350)
-    await page.wait_for_timeout(500)
-    items = await extract_search_cards(page)
-    if is_compare_url(page.url):
-        raise RuntimeError('Search led to Compare Models, not search results; refusing to send false stock data')
-    return items
 
 async def main():
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page(viewport={'width': 390, 'height': 844}, is_mobile=True, device_scale_factor=1)
-        try:
-            items = await search_products(page)
-        finally:
-            await browser.close()
-
-    if not items:
-        await telegram('⚠️ iQOO Refurbished monitor: search did not return identifiable refurbished product cards with prices. No stock status was guessed. Please check GitHub Actions logs.')
-        raise RuntimeError('No refurbished search-result cards found; previous state kept')
+        page = await browser.new_page(locale="en-IN", user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/126 Safari/537.36")
+        results = []
+        for item in PRODUCTS:
+            try:
+                results.append(await inspect(page, item))
+            except Exception as e:
+                results.append({"name":item["fallback"], "price":"Price not detected", "status":"UNKNOWN", "url":item["url"], "error":str(e)[:180]})
+        await browser.close()
 
     old = {}
     if STATE_FILE.exists():
-        try:
-            old_data = json.loads(STATE_FILE.read_text())
-            old = {x.get('url'): x for x in old_data.get('items', []) if x.get('url')}
-        except Exception:
-            old = {}
-
+        try: old = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        except Exception: old = {}
+    new = {}
     alerts = []
-    for item in items:
-        previous = old.get(item['url'], {}).get('status', 'UNKNOWN')
-        if item['status'] == 'IN_STOCK' and previous != 'IN_STOCK':
-            alerts.append(item)
-
+    for r in results:
+        previous = old.get(r["url"], {})
+        new[r["url"]] = {"status":r["status"], "price":r["price"], "name":r["name"]}
+        if r["status"] == "IN_STOCK" and previous.get("status") != "IN_STOCK":
+            alerts.append("🟢 STOCK AVAILABLE\n📱 " + r["name"] + "\n💰 " + r["price"] + "\n🔗 " + r["url"])
+        elif r["status"] == "IN_STOCK" and previous.get("price") != r["price"]:
+            alerts.append("💰 PRICE UPDATE (in stock)\n📱 " + r["name"] + "\n💵 " + r["price"] + "\n🔗 " + r["url"])
+    # Persist only after all products have been checked; unknown does not overwrite a known state.
+    merged = dict(old)
+    for r in results:
+        if r["status"] != "UNKNOWN":
+            merged[r["url"]] = new[r["url"]]
+    STATE_FILE.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
     if alerts:
-        lines = ['🟢 iQOO REFURBISHED — STOCK AVAILABLE!', '📋 Details taken only from the refurbished search results', '']
-        for item in alerts[:15]:
-            lines += [f"📱 {item['name']}", f"💰 {item['price'] or 'Price not shown in search result'}", '🟢 In Stock', item['url'], '']
-        if len(alerts) > 15:
-            lines.append(f'+ {len(alerts)-15} more product(s) available.')
-        await telegram('\n'.join(lines).strip())
+        telegram("📱 iQOO Refurbished Stock Alert\n\n" + "\n\n".join(alerts))
+    elif any(r["status"] == "UNKNOWN" for r in results):
+        telegram("⚠️ iQOO Refurbished monitor: some product pages did not expose a clear stock status. No stock was guessed.\n\n" + "\n".join(f"• {r['name']} — {r['price']} — {r['status']}\n{r['url']}" for r in results))
+    print(json.dumps(results, ensure_ascii=False, indent=2))
 
-    STATE_FILE.write_text(json.dumps({'query': QUERY, 'items': items}, indent=2, ensure_ascii=False))
-    print(f'Products found in search results: {len(items)}; newly available: {len(alerts)}')
-    for item in items:
-        print(item['status'], item['name'], item['price'], item['url'])
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())
