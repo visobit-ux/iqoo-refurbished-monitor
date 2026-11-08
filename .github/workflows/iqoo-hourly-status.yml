@@ -3,9 +3,8 @@ name: iQOO hourly stock status
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '17 * * * *'
   workflow_dispatch:
-
 jobs:
   hourly-status:
     runs-on: ubuntu-24.04
