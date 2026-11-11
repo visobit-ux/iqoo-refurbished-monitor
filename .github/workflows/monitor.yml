@@ -29,7 +29,17 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          playwright install --with-deps chromium
+          for attempt in 1 2 3; do
+            if playwright install --with-deps chromium; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Chromium installation failed after 3 attempts"
+              exit 1
+            fi
+            echo "Chromium installation attempt $attempt failed; retrying in 20 seconds..."
+            sleep 20
+          done
       - name: Check refurbished search results
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -45,4 +55,3 @@ jobs:
             git commit -m 'Update refurbished stock state' || true
             git push
           fi
-          
