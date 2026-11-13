@@ -3,7 +3,7 @@ name: iQOO hourly stock status
 
 on:
   schedule:
-    - cron: '43 * * * *'
+    - cron: '7 * * * *'
   workflow_dispatch:
 
 jobs:
