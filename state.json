@@ -1,26 +1,26 @@
 {
   "https://mshop.iqoo.com/in/product/2057?skuId=8341": {
-    "status": "OUT_OF_STOCK",
+    "status": "IN_STOCK",
     "price": "₹ 31,999",
     "name": "Neo 10R 8GB+128GB Raging Blue Refurbished"
   },
   "https://mshop.iqoo.com/in/product/2074?skuId=8469": {
-    "status": "OUT_OF_STOCK",
+    "status": "IN_STOCK",
     "price": "₹ 29,999",
     "name": "Z10 5G Refurbished 12GB+256GB Stellar Black"
   },
   "https://mshop.iqoo.com/in/product/2070?skuId=8445": {
-    "status": "OUT_OF_STOCK",
+    "status": "IN_STOCK",
     "price": "₹ 40,999",
     "name": "Neo 10 Refurbished 16GB+512GB Inferno Red"
   },
   "https://mshop.iqoo.com/in/product/2054?skuId=8325": {
-    "status": "OUT_OF_STOCK",
+    "status": "IN_STOCK",
     "price": "₹ 39,999",
     "name": "Neo9 Pro Refurbished 12GB+256GB Fiery Red without Accessories"
   },
   "https://mshop.iqoo.com/in/product/2066?skuId=8405": {
-    "status": "OUT_OF_STOCK",
+    "status": "IN_STOCK",
     "price": "₹ 61,999",
     "name": "iQOO 13 Refurbished 12GB+256GB Legend Refurbished"
   }
