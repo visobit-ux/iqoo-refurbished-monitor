@@ -133,7 +133,7 @@ async def main():
         count = len(in_stock)
         count_text = f"{count}+/5" if unknown else f"{count}/5"
         color = "🔴" if count == 0 and not unknown else "🟢"
-        message = f"📦 iQOO REFURBISHED\n{color} {count_text} IN STOCK"
+        message = f"📦 iQOO REFURBISHED — STOCK UPDATE\n{color}{count_text} IN STOCK"
     telegram(message)
     print(message)
 
