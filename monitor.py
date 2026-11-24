@@ -99,9 +99,9 @@ async def main():
         previous = old.get(r["url"], {})
         new[r["url"]] = {"status":r["status"], "price":r["price"], "name":r["name"]}
         if r["status"] == "IN_STOCK" and previous.get("status") != "IN_STOCK":
-            alerts.append("🟢 " + r["name"] + " — " + r["price"])
+            alerts.append("📱 " + r["name"] + "\n💰 " + r["price"] + "\n🟢 In stock")
         elif r["status"] == "IN_STOCK" and previous.get("price") != r["price"]:
-            alerts.append("💰 PRICE UPDATE\n🟢 " + r["name"] + " — " + r["price"])
+            alerts.append("📱 " + r["name"] + "\n💰 " + r["price"] + "\n🟢 In stock (price updated)")
     # Persist only after all products have been checked; unknown does not overwrite a known state.
     merged = dict(old)
     for r in results:
@@ -109,7 +109,7 @@ async def main():
             merged[r["url"]] = new[r["url"]]
     STATE_FILE.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
     if alerts:
-        telegram("📦 iQOO REFURBISHED\n\n" + "\n".join(alerts))
+        telegram("📦 iQOO REFURBISHED — STOCK UPDATE\n\n" + "\n\n".join(alerts))
     elif any(r["status"] == "UNKNOWN" for r in results):
         telegram("⚠️ iQOO REFURBISHED — STATUS UNCLEAR\n\n" + "\n".join(f"⚪ {r['name']} — {r['price']}" for r in results if r['status'] == "UNKNOWN"))
     print(json.dumps(results, ensure_ascii=False, indent=2))
