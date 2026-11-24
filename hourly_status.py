@@ -128,9 +128,9 @@ async def main():
     unknown = [r for r in results if r["status"] == "UNKNOWN"]
 
     if not in_stock and not unknown:
-        message = "📦 iQOO REFURBISHED\\n🔴 All 5 models out of stock."
+        message = "📦 iQOO REFURBISHED\n🔴 All 5 models out of stock."
     elif not in_stock:
-        message = f"📦 iQOO REFURBISHED\\n⚪ Stock status unclear for {len(unknown)} model(s)."
+        message = f"📦 iQOO REFURBISHED\n⚪ Stock status unclear for {len(unknown)} model(s)."
     else:
         lines = ["📦 iQOO REFURBISHED", ""]
         for r in in_stock:
@@ -141,7 +141,7 @@ async def main():
             lines.append(f"🔴 {r['name']} — {r['price']}")
         for r in unknown:
             lines.append(f"⚪ {r['name']} — {r['price']}")
-        message = "\\n".join(lines)
+        message = "\n".join(lines)
     telegram(message)
     print(message)
 
