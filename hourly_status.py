@@ -127,16 +127,21 @@ async def main():
     out_of_stock = [r for r in results if r["status"] == "OUT_OF_STOCK"]
     unknown = [r for r in results if r["status"] == "UNKNOWN"]
 
-    lines = ["📦 iQOO REFURBISHED", ""]
-    for r in in_stock:
-        lines.append(f"🟢 {r['name']} — {r['price']}")
-    if in_stock and (out_of_stock or unknown):
-        lines.append("")
-    for r in out_of_stock:
-        lines.append(f"🔴 {r['name']} — {r['price']}")
-    for r in unknown:
-        lines.append(f"⚪ {r['name']} — {r['price']}")
-    message = "\n".join(lines)
+    if not in_stock and not unknown:
+        message = "📦 iQOO REFURBISHED\\n🔴 All 5 models out of stock."
+    elif not in_stock:
+        message = f"📦 iQOO REFURBISHED\\n⚪ Stock status unclear for {len(unknown)} model(s)."
+    else:
+        lines = ["📦 iQOO REFURBISHED", ""]
+        for r in in_stock:
+            lines.append(f"🟢 {r['name']} — {r['price']}")
+        if out_of_stock or unknown:
+            lines.append("")
+        for r in out_of_stock:
+            lines.append(f"🔴 {r['name']} — {r['price']}")
+        for r in unknown:
+            lines.append(f"⚪ {r['name']} — {r['price']}")
+        message = "\\n".join(lines)
     telegram(message)
     print(message)
 
