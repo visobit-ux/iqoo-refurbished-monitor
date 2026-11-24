@@ -109,9 +109,10 @@ async def main():
             merged[r["url"]] = new[r["url"]]
     STATE_FILE.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
     if alerts:
-        telegram("📦 iQOO REFURBISHED — STOCK UPDATE\n\n" + "\n\n".join(alerts))
-    elif any(r["status"] == "UNKNOWN" for r in results):
-        telegram("⚠️ iQOO REFURBISHED — STATUS UNCLEAR\n\n" + "\n".join(f"⚪ {r['name']} — {r['price']}" for r in results if r['status'] == "UNKNOWN"))
+        in_stock_count = sum(1 for r in results if r["status"] == "IN_STOCK")
+        unknown_count = sum(1 for r in results if r["status"] == "UNKNOWN")
+        count_text = f"{in_stock_count}+/5" if unknown_count else f"{in_stock_count}/5"
+        telegram(f"📦 iQOO REFURBISHED\\n🟢 {count_text} IN STOCK")
     print(json.dumps(results, ensure_ascii=False, indent=2))
 
 if __name__ == "__main__":
