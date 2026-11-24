@@ -128,12 +128,12 @@ async def main():
     unknown = [r for r in results if r["status"] == "UNKNOWN"]
 
     if unknown and not in_stock:
-        message = "📦 iQOO REFURBISHED\\n⚪ Stock status unclear"
+        message = "📦 iQOO REFURBISHED\n⚪ Stock status unclear"
     else:
         count = len(in_stock)
         count_text = f"{count}+/5" if unknown else f"{count}/5"
         color = "🔴" if count == 0 and not unknown else "🟢"
-        message = f"📦 iQOO REFURBISHED\\n{color} {count_text} IN STOCK"
+        message = f"📦 iQOO REFURBISHED\n{color} {count_text} IN STOCK"
     telegram(message)
     print(message)
 
