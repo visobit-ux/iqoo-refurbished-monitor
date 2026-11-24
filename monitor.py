@@ -112,7 +112,7 @@ async def main():
         in_stock_count = sum(1 for r in results if r["status"] == "IN_STOCK")
         unknown_count = sum(1 for r in results if r["status"] == "UNKNOWN")
         count_text = f"{in_stock_count}+/5" if unknown_count else f"{in_stock_count}/5"
-        telegram(f"📦 iQOO REFURBISHED\n🟢 {count_text} IN STOCK")
+        telegram(f"📦 iQOO REFURBISHED — STOCK UPDATE\n🟢{count_text} IN STOCK")
     print(json.dumps(results, ensure_ascii=False, indent=2))
 
 if __name__ == "__main__":
