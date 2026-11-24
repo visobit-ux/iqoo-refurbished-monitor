@@ -124,46 +124,19 @@ async def main():
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     in_stock = [r for r in results if r["status"] == "IN_STOCK"]
+    out_of_stock = [r for r in results if r["status"] == "OUT_OF_STOCK"]
     unknown = [r for r in results if r["status"] == "UNKNOWN"]
 
-    if not in_stock and not unknown:
-        message = (
-            f"⏰ iQOO Refurbished Status\n"
-            f"🔴 All {len(results)} models are out of stock.\n"
-            f"🕒 {now}"
-        )
-
-    elif not in_stock:
-        message = (
-            f"⏰ iQOO Refurbished Status\n"
-            f"⚪ No confirmed stock — {len(unknown)} status unclear.\n"
-            f"🕒 {now}"
-        )
-
-    else:
-        lines = [
-            f"🎉 iQOO REFURBISHED — STOCK UPDATE",
-            f"🕒 {now}",
-            ""
-        ]
-
-        for r in results:
-            if r["status"] == "IN_STOCK":
-                status = "🟢 In stock"
-            elif r["status"] == "OUT_OF_STOCK":
-                status = "🔴 Out of stock / unavailable"
-            else:
-                status = "⚪ Status unclear"
-
-            lines.append(
-                f"📱 {r['name']}\n"
-                f"💰 {r['price']}\n"
-                f"{status}\n"
-                f"🔗 {r['url']}\n"
-            )
-
-        message = "\n".join(lines)
-
+    lines = ["📦 iQOO REFURBISHED", ""]
+    for r in in_stock:
+        lines.append(f"🟢 {r['name']} — {r['price']}")
+    if in_stock and (out_of_stock or unknown):
+        lines.append("")
+    for r in out_of_stock:
+        lines.append(f"🔴 {r['name']} — {r['price']}")
+    for r in unknown:
+        lines.append(f"⚪ {r['name']} — {r['price']}")
+    message = "\n".join(lines)
     telegram(message)
     print(message)
 
